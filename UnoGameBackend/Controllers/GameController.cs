@@ -14,4 +14,10 @@ public class GameController : Controller
     {
         _hubContext = hubContext;
     }
+
+    [HttpGet("test")]
+    public void Test()
+    {
+        var a = 1 + 1;
+    }
 }
