@@ -14,15 +14,14 @@ namespace UnoGameBackend.Hubs
         {
             return base.OnConnectedAsync();
         }
-        
-        private async Task UpdatePlayers(Room room)
+
+        private async Task UpdateRoomPlayers(Room room)
         {
-            await Clients.Group($"game-{room.Id.ToString()}")
-                .SendAsync("UpdateRoomPlayers",
-                    room.Players.Select(p =>
-                        p == null
-                            ? new { Username = string.Empty, IsReady = false, CardCount = 0 }
-                            : new { p.Username, p.IsReady, CardCount = p.HandCards.Count }));
+            var info = room.Players.Select(p =>
+                p == null
+                    ? new { Username = string.Empty, IsReady = false, CardCount = 0 }
+                    : new { p.Username, p.IsReady, CardCount = p.HandCards.Count });
+            await Clients.Group($"game-{room.Id.ToString()}").SendAsync("UpdateRoomPlayers", info);
         }
 
         /// <summary>
@@ -53,6 +52,12 @@ namespace UnoGameBackend.Hubs
             }
         }
 
+        /// <summary>
+        /// 加入房间
+        /// </summary>
+        /// <param name="roomId"></param>
+        /// <param name="username"></param>
+        /// <exception cref="Exception"></exception>
         public async Task JoinRoom(int roomId, string username)
         {
             try
@@ -69,7 +74,7 @@ namespace UnoGameBackend.Hubs
 
                 room.Players[Array.IndexOf(room.Players, null)] = user;
                 await Groups.AddToGroupAsync(Context.ConnectionId, $"game-{roomId.ToString()}");
-                await UpdatePlayers(room);
+                await UpdateRoomPlayers(room);
             }
             catch (Exception e)
             {
