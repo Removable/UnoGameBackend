@@ -13,7 +13,27 @@ namespace UnoGameBackend.Hubs
 
         public override Task OnDisconnectedAsync(Exception? exception)
         {
-            //TODO live room
+            //通过connectionId找到用户名
+            foreach (var (key, value) in UsernameToSignalRId)
+            {
+                if (value.Contains(Context.ConnectionId) && Player.Players.ContainsKey(key) &&
+                    Player.Players[key] is { } user)
+                {
+                    //找到该用户所在房间并将其移除
+                    foreach (var room in Room.Rooms)
+                    {
+                        if (room.Players.FirstOrDefault(rp =>
+                                rp != null && rp.Username.Equals(user.Username, StringComparison.OrdinalIgnoreCase)) is
+                            { } roomUser)
+                        {
+                            return LogoutBase(user.Username, room.Id);
+                        }
+                    }
+
+                    break;
+                }
+            }
+
             return base.OnDisconnectedAsync(exception);
         }
 
@@ -22,6 +42,11 @@ namespace UnoGameBackend.Hubs
             return base.OnConnectedAsync();
         }
 
+        /// <summary>
+        /// 登出
+        /// </summary>
+        /// <param name="username"></param>
+        /// <param name="roomId"></param>
         public async Task UserLogout(string username, int roomId = -1)
         {
             await LogoutBase(username, roomId);
@@ -43,7 +68,10 @@ namespace UnoGameBackend.Hubs
 
                     var userIndex = Array.IndexOf(room.Players, user);
                     room.Players[userIndex] = null;
+                    UsernameToSignalRId.TryRemove(username.ToLower(), out var outValue);
+
                     await UpdateRoomPlayers(room);
+                    await Clients.Group(username.ToLower()).SendAsync("LogoutResult", true, string.Empty);
                 }
             }
             catch (Exception e)
@@ -121,7 +149,7 @@ namespace UnoGameBackend.Hubs
 
                 await Groups.AddToGroupAsync(Context.ConnectionId, $"game-{roomId.ToString()}");
                 await UpdateRoomPlayers(room);
-                await Clients.Group(username.ToLower()).SendAsync("JoinRoomResult", true, "");
+                await Clients.Group(username.ToLower()).SendAsync("JoinRoomResult", true, "", room.Id);
                 var hs = new HashSet<string>();
                 if (UsernameToSignalRId.ContainsKey(username))
                 {
@@ -134,11 +162,11 @@ namespace UnoGameBackend.Hubs
             catch (Exception e)
             {
                 Console.WriteLine(e);
-                await Clients.Group(username.ToLower()).SendAsync("JoinRoomResult", false, e.Message);
+                await Clients.Group(username.ToLower()).SendAsync("JoinRoomResult", false, e.Message, -1);
             }
         }
 
-        public async Task ToggleReady(string username)
+        public async Task ToggleReady(string username, int roomId)
         {
             try
             {
@@ -147,12 +175,49 @@ namespace UnoGameBackend.Hubs
                     throw new Exception("找不到用户");
                 var user = Player.Players[username.ToLower()];
                 user.IsReady = !user.IsReady;
-                await Clients.Group(username.ToLower()).SendAsync("ToggleReadyResult", false, user.IsReady, "");
+                if (Room.Rooms.FirstOrDefault(r => r.Id == roomId) is { } room)
+                {
+                    //若所有玩家都已准备
+                    if (room.Players.All(p => p?.IsReady ?? true) && room.Players.Count(p => p != null) >= 2)
+                    {
+                        room.GameStart();
+                        await UpdateRoomPlayers(room);
+                        await UpdatePlayerHandCards(room);
+                        room.Game.Status = GameStatus.Playing;
+                        await UpdateGameState(room);
+                    }
+                    else
+                    {
+                        room.Game.Status = GameStatus.Waiting;
+                        await UpdateGameState(room);
+                        await UpdateRoomPlayers(room);
+                    }
+                }
+
+                await Clients.Group(username.ToLower())
+                    .SendAsync("ToggleReadyResult", true, string.Empty, user.IsReady);
             }
             catch (Exception e)
             {
                 Console.WriteLine(e);
-                await Clients.Group(username.ToLower()).SendAsync("ToggleReadyResult", false, false, e.Message);
+                await Clients.Group(username.ToLower()).SendAsync("ToggleReadyResult", false, e.Message, false);
+            }
+        }
+
+        private async Task UpdateGameState(Room room)
+        {
+            await Clients.Group(room.Id.ToString()).SendAsync("UpdateGameState", room.Game.Status);
+        }
+
+        private async Task UpdatePlayerHandCards(Room room)
+        {
+            foreach (var player in room.Players)
+            {
+                if (player != null && !string.IsNullOrWhiteSpace(player.Username))
+                {
+                    await Clients.Group(player.Username.ToLower()).SendAsync("UpdateHandCards",
+                        player.HandCards.OrderBy(c => c.CardType).ThenBy(c => c.Color).ThenBy(c => c.CardNumber));
+                }
             }
         }
     }
