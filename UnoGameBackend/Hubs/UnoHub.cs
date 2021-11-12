@@ -216,7 +216,7 @@ namespace UnoGameBackend.Hubs
                 if (player != null && !string.IsNullOrWhiteSpace(player.Username))
                 {
                     await Clients.Group(player.Username.ToLower()).SendAsync("UpdateHandCards",
-                        player.HandCards.OrderBy(c => c.CardType).ThenBy(c => c.Color).ThenBy(c => c.CardNumber));
+                        player.HandCards.OrderBy(c => c.Color).ThenBy(c => c.CardType).ThenBy(c => c.CardNumber));
                 }
             }
         }

@@ -20,7 +20,7 @@ public class Room
     /// 当前出牌顺序(默认顺时针)
     /// </summary>
     public PlayOrder PlayOrder { get; set; } = PlayOrder.Clockwise;
-    
+
     /// <summary>
     /// 当前累计的需抽卡数量（+2或+4卡造成）
     /// </summary>
@@ -32,21 +32,21 @@ public class Room
         this.DrawCardActionCount = 0;
         this.PlayOrder = PlayOrder.Clockwise;
         //洗牌
-        var deck = Card.GenerateCardsDeck(this.Game.CardDeckNumber);
+        var deck = Card.GenerateCardsDeck(this.Game.CardDeckNumber, this.Players.Count(p => p != null));
         foreach (var card in deck)
         {
             this.Game.UnusedCards.Enqueue(card);
         }
 
         //发牌
-        for (var i = 0; i < 7; i++)
+        foreach (var player in this.Players)
         {
-            foreach (var player in this.Players)
+            if (player == null) continue;
+            player.HandCards = new(15);
+            for (var i = 0; i < 7; i++)
             {
-                if (player != null)
-                {
-                    player.HandCards.Add(this.Game.UnusedCards.Dequeue());
-                }
+                //起手不能有+4
+                player.HandCards.Add(this.Game.UnusedCards.Dequeue());
             }
         }
     }

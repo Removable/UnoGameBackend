@@ -2,6 +2,7 @@ namespace UnoGameBackend.Data;
 
 public class Card
 {
+    public Guid CardId { get; set; } = Guid.NewGuid();
     public CardType CardType { get; set; }
 
     public int CardNumber { get; set; }
@@ -12,8 +13,9 @@ public class Card
     /// 生成牌堆
     /// </summary>
     /// <param name="deckNumber"></param>
+    /// <param name="playerCount">玩家人数，方便确定起手牌没有+4</param>
     /// <returns></returns>
-    public static Card[] GenerateCardsDeck(int deckNumber)
+    public static Card[] GenerateCardsDeck(int deckNumber, int playerCount)
     {
         var deck = new List<Card>(108 * deckNumber);
 
@@ -77,7 +79,15 @@ public class Card
 
         #endregion
 
-        ListRandom(deck);
+        ListRandom(deck, 5);
+
+        //若起手牌有+4，就将其往后放
+        var cardNum = playerCount * 7; //每人开局7张牌
+        if (deck.ToArray()[0..cardNum].Any(c =>
+                c.CardType == CardType.UniversalCard && c.CardNumber == (int)CardUniversal.WildDrawFour))
+        {
+            //TODO 这里继续
+        }
 
         return deck.ToArray();
     }
@@ -87,16 +97,21 @@ public class Card
     /// </summary>
     /// <param name="sources"></param>
     /// <typeparam name="T"></typeparam>
-    public static void ListRandom<T>(IList<T> sources)
+    public static void ListRandom<T>(IList<T> sources, int randomCount = 1)
     {
-        var rd = new Random(Guid.NewGuid().GetHashCode());
-        for (var i = 0; i < sources.Count; i++)
+        while (randomCount > 0)
         {
-            var index = rd.Next(0, sources.Count - 1);
-            if (index != i)
+            var rd = new Random(Guid.NewGuid().GetHashCode());
+            for (var i = 0; i < sources.Count; i++)
             {
-                (sources[i], sources[index]) = (sources[index], sources[i]);
+                var index = rd.Next(0, sources.Count - 1);
+                if (index != i)
+                {
+                    (sources[i], sources[index]) = (sources[index], sources[i]);
+                }
             }
+
+            randomCount -= 1;
         }
     }
 }
