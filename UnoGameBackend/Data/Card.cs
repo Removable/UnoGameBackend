@@ -8,6 +8,8 @@ public class Card
     public int CardNumber { get; set; }
 
     public CardColor? Color { get; set; }
+    
+    public bool Selected { get; set; }
 
     /// <summary>
     /// 生成牌堆
@@ -82,11 +84,21 @@ public class Card
         ListRandom(deck, 5);
 
         //若起手牌有+4，就将其往后放
-        var cardNum = playerCount * 7; //每人开局7张牌
-        if (deck.ToArray()[0..cardNum].Any(c =>
-                c.CardType == CardType.UniversalCard && c.CardNumber == (int)CardUniversal.WildDrawFour))
+        var cardCount = playerCount * 7; //每人开局7张牌
+        var drawFourCards = deck.ToArray()[..cardCount].Where(c =>
+            c.CardType == CardType.UniversalCard && c.CardNumber == (int)CardUniversal.WildDrawFour).ToList();
+        if (drawFourCards.Any())
         {
-            //TODO 这里继续
+            //从前面移除这些牌
+            foreach (var card in drawFourCards)
+            {
+                deck.Remove(card);
+            }
+            //放到后面
+            foreach (var card in drawFourCards)
+            {
+                deck.Insert(Random.Shared.Next(cardCount, deck.Count), card);
+            }
         }
 
         return deck.ToArray();

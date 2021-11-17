@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using Microsoft.AspNetCore.SignalR;
 using UnoGameBackend.Data;
+using UnoGameBackend.Game;
 
 namespace UnoGameBackend.Hubs
 {
@@ -60,6 +61,9 @@ namespace UnoGameBackend.Hubs
                 if (!Player.Players.ContainsKey(username.ToLower()))
                     throw new Exception("找不到用户");
                 var user = Player.Players[username];
+                user.IsReady = false;
+                await Clients.Group(username.ToLower())
+                    .SendAsync("ReadyChanged", true, string.Empty, user.IsReady);
                 if (roomId >= 0)
                 {
                     var room = Room.Rooms.FirstOrDefault(r => r.Id == 0);
@@ -70,8 +74,19 @@ namespace UnoGameBackend.Hubs
                     room.Players[userIndex] = null;
                     UsernameToSignalRId.TryRemove(username.ToLower(), out var outValue);
 
+                    if (room.Players.Count(p => p != null) <= 1)
+                    {
+                        room.GameFinish();
+                        await UpdateGameState(room);
+                    }
                     await UpdateRoomPlayers(room);
                     await Clients.Group(username.ToLower()).SendAsync("LogoutResult", true, string.Empty);
+                    foreach (var player in room.Players)
+                    {
+                        if (player == null) continue;
+                        await Clients.Group(player.Username.ToLower())
+                            .SendAsync("ReadyChanged", true, string.Empty, player.IsReady);
+                    }
                 }
             }
             catch (Exception e)
@@ -195,18 +210,18 @@ namespace UnoGameBackend.Hubs
                 }
 
                 await Clients.Group(username.ToLower())
-                    .SendAsync("ToggleReadyResult", true, string.Empty, user.IsReady);
+                    .SendAsync("ReadyChanged", true, string.Empty, user.IsReady);
             }
             catch (Exception e)
             {
                 Console.WriteLine(e);
-                await Clients.Group(username.ToLower()).SendAsync("ToggleReadyResult", false, e.Message, false);
+                await Clients.Group(username.ToLower()).SendAsync("ReadyChanged", false, e.Message, false);
             }
         }
 
         private async Task UpdateGameState(Room room)
         {
-            await Clients.Group(room.Id.ToString()).SendAsync("UpdateGameState", room.Game.Status);
+            await Clients.Group($"game-{room.Id.ToString()}").SendAsync("UpdateGameState", (int)room.Game.Status);
         }
 
         private async Task UpdatePlayerHandCards(Room room)

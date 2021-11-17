@@ -8,6 +8,7 @@ public enum GameStatus
     Waiting,
     Starting,
     Playing,
+    Finished,
 }
 
 /// <summary>

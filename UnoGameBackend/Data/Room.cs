@@ -50,4 +50,14 @@ public class Room
             }
         }
     }
+
+    public void GameFinish()
+    {
+        this.Game.Status = GameStatus.Waiting;
+        foreach (var player in this.Players)
+        {
+            if (player == null) continue;
+            player.IsReady = false;
+        }
+    }
 }
