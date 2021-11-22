@@ -253,12 +253,13 @@ namespace UnoGameBackend.Hubs
         /// </summary>
         /// <param name="cardId"></param>
         /// <param name="username"></param>
-        public async Task PlayCard(Guid cardId, string username)
+        /// <param name="color"></param>
+        public async Task PlayCard(Guid cardId, string username, CardColor color)
         {
             try
             {
                 var user = Player.Players[username.ToLower()];
-                if (user == null || user.HandCards.All(c => c.CardId != cardId))
+                if (user == null)
                 {
                     throw new Exception("数据出错！");
                 }
@@ -269,16 +270,23 @@ namespace UnoGameBackend.Hubs
                     throw new Exception("数据出错！");
                 }
 
+                if (room.WaitingForPlay != user)
+                {
+                    throw new Exception("未轮到你出牌");
+                }
+
                 //要出的牌
                 var card = room.Game.UnusedCards.FirstOrDefault(c => c.CardId == cardId);
-                if (card == null) throw new Exception("这张牌已被打出！");
+                if (card != null) throw new Exception("这张牌已被打出！");
+                card = user.HandCards.FirstOrDefault(c => c.CardId == cardId);
+                if (card == null) throw new Exception("数据错误！");
 
                 //获取上一张牌
                 var canPlay = false;
-                if (room.Game.LastCard == null) canPlay = true;
+                if (room.Game.LastCard.card == null) canPlay = true;
                 //如果上一张牌是+2牌，则跟牌必须为+2或+4
-                else if (room.Game.LastCard.CardType == CardType.ActionCard &&
-                         room.Game.LastCard.CardNumber == (int)CardAction.DrawTwo &&
+                else if (room.Game.LastCard.card.CardType == CardType.ActionCard &&
+                         room.Game.LastCard.card.CardNumber == (int)CardAction.DrawTwo &&
                          (card.CardType == CardType.ActionCard && card.CardNumber == (int)CardAction.DrawTwo ||
                           card.CardType == CardType.UniversalCard &&
                           card.CardNumber == (int)CardUniversal.WildDrawFour))
@@ -291,13 +299,13 @@ namespace UnoGameBackend.Hubs
                     canPlay = true;
                 }
                 //颜色相同
-                else if (room.Game.LastCard.Color == card.Color)
+                else if (room.Game.LastCard.card.Color == card.Color)
                 {
                     canPlay = true;
                 }
                 //卡面相同
-                else if (room.Game.LastCard.CardType == card.CardType &&
-                         room.Game.LastCard.CardNumber == card.CardNumber)
+                else if (room.Game.LastCard.card.CardType == card.CardType &&
+                         room.Game.LastCard.card.CardNumber == card.CardNumber)
                 {
                     canPlay = true;
                 }
@@ -306,23 +314,116 @@ namespace UnoGameBackend.Hubs
                     throw new Exception("出牌错误~");
 
                 //处理出牌影响
+                var interval = 1; //下一位出牌玩家索引偏移量
+                var playOrder = room.Game.PlayOrder; //当前出牌顺序
+                var drawCardActionCount = room.Game.DrawCardActionCount; //累计需抽牌数
+                var gameColor = card.Color;
                 switch (card.CardType)
                 {
                     case CardType.NumberCard:
                         break;
                     case CardType.ActionCard:
+                        switch (card.CardNumber)
+                        {
+                            default:
+                            case (int)CardAction.Skip:
+                                interval += 1;
+                                break;
+                            case (int)CardAction.Reverse:
+                                playOrder = playOrder == PlayOrder.Anticlockwise
+                                    ? PlayOrder.Clockwise
+                                    : PlayOrder.Anticlockwise;
+                                break;
+                            case (int)CardAction.DrawTwo:
+                                drawCardActionCount += 2;
+                                break;
+                        }
+
                         break;
                     case CardType.UniversalCard:
+                        gameColor = color;
+                        switch (card.CardNumber)
+                        {
+                            default:
+                            case (int)CardUniversal.Wild:
+                                break;
+                            case (int)CardUniversal.WildDrawFour:
+                                drawCardActionCount += 4;
+                                break;
+                        }
+
                         break;
                     default:
                         throw new Exception("出牌错误~");
                 }
+
+                user.HandCards.Remove(card);
+
+                //仅余一张卡，且非数字卡时，需要自动补一张
+                if (user.HandCards.Count == 1 && user.HandCards.FirstOrDefault()!.CardType != CardType.NumberCard)
+                {
+                    user.HandCards.AddRange(room.Game.DrawCard(1));
+                }
+
+                room.Game.UsedCards.Add(card);
+                room.Game.LastCard = (card, gameColor);
+                //找到下一位应该出牌的玩家
+                var currentIndex = room.Game.WaitingForPlayIndex;
+                while (interval > 0)
+                {
+                    currentIndex += 1;
+                    if (currentIndex == room.Players.Length)
+                        currentIndex = 0;
+                    var next = room.Players[currentIndex];
+                    if (next == null) continue;
+                    interval -= 1;
+                    room.Game.WaitingForPlayIndex = Array.IndexOf(room.Players, next);
+                }
+                room.Game.PlayOrder = playOrder;
+                room.Game.DrawCardActionCount = drawCardActionCount;
+                await Clients.Group($"game-{room.Id.ToString()}").SendAsync("PlayCardResult", true, "",
+                    new { card, index = Array.IndexOf(room.Players, user) });
+                await UpdatePlayerHandCards(user);
+                await UpdateRoomPlayers(room);
             }
             catch (Exception e)
             {
                 Console.WriteLine(e);
-                await Clients.Group(username.ToLower()).SendAsync("PlayCardResult", false, e.Message, false);
+                await Clients.Group(username.ToLower()).SendAsync("PlayCardResult", false, e.Message, null);
             }
+        }
+
+        /// <summary>
+        /// 抽牌
+        /// </summary>
+        /// <param name="username"></param>
+        /// <exception cref="Exception"></exception>
+        public async Task DrawCard(string username)
+        {
+            var user = Player.Players[username.ToLower()];
+            if (user == null)
+            {
+                throw new Exception("数据出错！");
+            }
+
+            var room = Room.Rooms.FirstOrDefault(r => r.Players.Contains(user));
+            if (room == null || room.Game.Status != GameStatus.Playing)
+            {
+                throw new Exception("数据出错！");
+            }
+
+            if (room.WaitingForPlay != user)
+            {
+                throw new Exception("未轮到你抽牌");
+            }
+
+            var drawCount = room.Game.DrawCardActionCount;
+            drawCount = drawCount == 0 ? 1 : drawCount;
+
+            //抽卡
+            user.HandCards.AddRange(room.Game.DrawCard(drawCount));
+            await UpdatePlayerHandCards(user);
+            await UpdateRoomPlayers(room);
         }
     }
 }

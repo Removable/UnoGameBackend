@@ -16,11 +16,11 @@ public class GamePlay
     public List<Card> UsedCards { get; set; } = new(108);
 
     public Queue<Card> UnusedCards { get; set; } = new(108);
-    
+
     /// <summary>
     /// 上一张牌
     /// </summary>
-    public Card? LastCard { get; set; }
+    public (Card? card, CardColor? color) LastCard { get; set; }
 
     /// <summary>
     /// 当前出牌顺序(默认顺时针)
@@ -36,4 +36,38 @@ public class GamePlay
     /// 当前累计的需抽卡数量（+2或+4卡造成）
     /// </summary>
     public int DrawCardActionCount { get; set; }
+
+    /// <summary>
+    /// 洗牌
+    /// </summary>
+    private void Shuffle()
+    {
+        Card.ListRandom(UsedCards, 5);
+        foreach (var gameUsedCard in UsedCards)
+        {
+            UnusedCards.Enqueue(gameUsedCard);
+        }
+
+        UsedCards.Clear();
+    }
+
+    /// <summary>
+    /// 抽牌
+    /// </summary>
+    /// <returns></returns>
+    public IList<Card> DrawCard(int drawCount)
+    {
+        if (UnusedCards.Count < drawCount)
+        {
+            Shuffle();
+        }
+
+        var drawCards = new List<Card>();
+        for (var i = 0; i < drawCount; i++)
+        {
+            drawCards.Add(UnusedCards.Dequeue());
+        }
+
+        return drawCards;
+    }
 }

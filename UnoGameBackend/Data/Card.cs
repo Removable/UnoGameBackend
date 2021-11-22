@@ -108,6 +108,7 @@ public class Card
     /// 洗牌（打乱List）
     /// </summary>
     /// <param name="sources"></param>
+    /// <param name="randomCount"></param>
     /// <typeparam name="T"></typeparam>
     public static void ListRandom<T>(IList<T> sources, int randomCount = 1)
     {
