@@ -113,10 +113,9 @@ public class Card
     {
         while (randomCount > 0)
         {
-            var rd = new Random(Guid.NewGuid().GetHashCode());
             for (var i = 0; i < sources.Count; i++)
             {
-                var index = rd.Next(0, sources.Count - 1);
+                var index = Random.Shared.Next(0, sources.Count - 1);
                 if (index != i)
                 {
                     (sources[i], sources[index]) = (sources[index], sources[i]);

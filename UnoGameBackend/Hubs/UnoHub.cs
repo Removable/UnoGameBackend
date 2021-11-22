@@ -79,6 +79,7 @@ namespace UnoGameBackend.Hubs
                         room.GameFinish();
                         await UpdateGameState(room);
                     }
+
                     await UpdateRoomPlayers(room);
                     await Clients.Group(username.ToLower()).SendAsync("LogoutResult", true, string.Empty);
                     foreach (var player in room.Players)
@@ -181,6 +182,12 @@ namespace UnoGameBackend.Hubs
             }
         }
 
+        /// <summary>
+        /// 点击准备
+        /// </summary>
+        /// <param name="username"></param>
+        /// <param name="roomId"></param>
+        /// <exception cref="Exception"></exception>
         public async Task ToggleReady(string username, int roomId)
         {
             try
@@ -197,7 +204,7 @@ namespace UnoGameBackend.Hubs
                     {
                         room.GameStart();
                         await UpdateRoomPlayers(room);
-                        await UpdatePlayerHandCards(room);
+                        await UpdateAllPlayersHandCards(room);
                         room.Game.Status = GameStatus.Playing;
                         await UpdateGameState(room);
                     }
@@ -224,15 +231,97 @@ namespace UnoGameBackend.Hubs
             await Clients.Group($"game-{room.Id.ToString()}").SendAsync("UpdateGameState", (int)room.Game.Status);
         }
 
-        private async Task UpdatePlayerHandCards(Room room)
+        private async Task UpdateAllPlayersHandCards(Room room)
         {
             foreach (var player in room.Players)
             {
                 if (player != null && !string.IsNullOrWhiteSpace(player.Username))
                 {
-                    await Clients.Group(player.Username.ToLower()).SendAsync("UpdateHandCards",
-                        player.HandCards.OrderBy(c => c.Color).ThenBy(c => c.CardType).ThenBy(c => c.CardNumber));
+                    await UpdatePlayerHandCards(player);
                 }
+            }
+        }
+
+        private async Task UpdatePlayerHandCards(Player player)
+        {
+            await Clients.Group(player.Username.ToLower()).SendAsync("UpdateHandCards",
+                player.HandCards.OrderBy(c => c.Color).ThenBy(c => c.CardType).ThenBy(c => c.CardNumber));
+        }
+
+        /// <summary>
+        /// 出牌
+        /// </summary>
+        /// <param name="cardId"></param>
+        /// <param name="username"></param>
+        public async Task PlayCard(Guid cardId, string username)
+        {
+            try
+            {
+                var user = Player.Players[username.ToLower()];
+                if (user == null || user.HandCards.All(c => c.CardId != cardId))
+                {
+                    throw new Exception("数据出错！");
+                }
+
+                var room = Room.Rooms.FirstOrDefault(r => r.Players.Contains(user));
+                if (room == null || room.Game.Status != GameStatus.Playing)
+                {
+                    throw new Exception("数据出错！");
+                }
+
+                //要出的牌
+                var card = room.Game.UnusedCards.FirstOrDefault(c => c.CardId == cardId);
+                if (card == null) throw new Exception("这张牌已被打出！");
+
+                //获取上一张牌
+                var canPlay = false;
+                if (room.Game.LastCard == null) canPlay = true;
+                //如果上一张牌是+2牌，则跟牌必须为+2或+4
+                else if (room.Game.LastCard.CardType == CardType.ActionCard &&
+                         room.Game.LastCard.CardNumber == (int)CardAction.DrawTwo &&
+                         (card.CardType == CardType.ActionCard && card.CardNumber == (int)CardAction.DrawTwo ||
+                          card.CardType == CardType.UniversalCard &&
+                          card.CardNumber == (int)CardUniversal.WildDrawFour))
+                {
+                    canPlay = true;
+                }
+                //万能牌
+                else if (card.CardType == CardType.UniversalCard)
+                {
+                    canPlay = true;
+                }
+                //颜色相同
+                else if (room.Game.LastCard.Color == card.Color)
+                {
+                    canPlay = true;
+                }
+                //卡面相同
+                else if (room.Game.LastCard.CardType == card.CardType &&
+                         room.Game.LastCard.CardNumber == card.CardNumber)
+                {
+                    canPlay = true;
+                }
+
+                if (!canPlay)
+                    throw new Exception("出牌错误~");
+
+                //处理出牌影响
+                switch (card.CardType)
+                {
+                    case CardType.NumberCard:
+                        break;
+                    case CardType.ActionCard:
+                        break;
+                    case CardType.UniversalCard:
+                        break;
+                    default:
+                        throw new Exception("出牌错误~");
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                await Clients.Group(username.ToLower()).SendAsync("PlayCardResult", false, e.Message, false);
             }
         }
     }

@@ -15,22 +15,47 @@ public class Room
     };
 
     public Player?[] Players { get; set; } = new Player?[8];
+    
+    /// <summary>
+    /// 当前等待出牌的用户
+    /// </summary>
+    public Player? WaitingForPlay => Players[Game.WaitingForPlayIndex];
 
     /// <summary>
-    /// 当前出牌顺序(默认顺时针)
+    /// 下一个出牌用户
     /// </summary>
-    public PlayOrder PlayOrder { get; set; } = PlayOrder.Clockwise;
+    public Player NextPlayUser
+    {
+        get
+        {
+            var index = this.Game.WaitingForPlayIndex;
+            Player? nextUser;
+            if (this.Game.PlayOrder == PlayOrder.Clockwise)
+            {
+                do
+                {
+                    index += 1;
+                    if (index >= this.Players.Length) index = 0;
+                    nextUser = this.Players[index];
+                } while (nextUser == null);
+            }
+            else
+            {
+                do
+                {
+                    index -= 1;
+                    if (index < 0) index = this.Players.Length - 1;
+                    nextUser = this.Players[index];
+                } while (nextUser == null);
+            }
 
-    /// <summary>
-    /// 当前累计的需抽卡数量（+2或+4卡造成）
-    /// </summary>
-    public int DrawCardActionCount { get; set; }
+            return nextUser;
+        }
+    }
 
     public void GameStart()
     {
         this.Game = new GamePlay { Status = GameStatus.Starting };
-        this.DrawCardActionCount = 0;
-        this.PlayOrder = PlayOrder.Clockwise;
         //洗牌
         var deck = Card.GenerateCardsDeck(this.Game.CardDeckNumber, this.Players.Count(p => p != null));
         foreach (var card in deck)
