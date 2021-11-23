@@ -15,9 +15,15 @@ public class GameController : Controller
         _hubContext = hubContext;
     }
 
-    [HttpGet("test")]
-    public void Test()
+    [HttpGet("UsersInfo")]
+    public IActionResult UsersInfo()
     {
-        var a = 1 + 1;
+        return Json(Player.Players);
+    }
+
+    [HttpGet("RoomInfo")]
+    public IActionResult RoomInfo(int roomId)
+    {
+        return Json(Room.Rooms.FirstOrDefault(r => r.Id == roomId));
     }
 }

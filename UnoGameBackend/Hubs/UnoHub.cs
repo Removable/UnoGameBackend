@@ -268,7 +268,7 @@ namespace UnoGameBackend.Hubs
                 var room = Room.Rooms.FirstOrDefault(r => r.Players.Contains(user));
                 if (room == null || room.Game.Status != GameStatus.Playing)
                 {
-                    throw new Exception("数据出错！");
+                    throw new Exception("游戏尚未开始！");
                 }
 
                 if (room.WaitingForPlay != user)
@@ -364,6 +364,14 @@ namespace UnoGameBackend.Hubs
                 if (user.HandCards.Count == 1 && user.HandCards.FirstOrDefault()!.CardType != CardType.NumberCard)
                 {
                     user.HandCards.AddRange(room.Game.DrawCard(1));
+                }
+                
+                //牌出完，游戏结束
+                if (user.HandCards.Count <= 0)
+                {
+                    room.GameFinish();
+                    await UpdateGameState(room);
+                    return;
                 }
 
                 room.Game.UsedCards.Add(card);
