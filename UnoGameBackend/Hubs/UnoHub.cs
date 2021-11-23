@@ -228,7 +228,8 @@ namespace UnoGameBackend.Hubs
 
         private async Task UpdateGameState(Room room)
         {
-            await Clients.Group($"game-{room.Id.ToString()}").SendAsync("UpdateGameState", (int)room.Game.Status);
+            await Clients.Group($"game-{room.Id.ToString()}").SendAsync("UpdateGameState", (int)room.Game.Status,
+                room.Game.DrawCardActionCount);
         }
 
         private async Task UpdateAllPlayersHandCards(Room room)
@@ -286,12 +287,12 @@ namespace UnoGameBackend.Hubs
                 if (room.Game.LastCard.card == null) canPlay = true;
                 //如果上一张牌是+2牌，则跟牌必须为+2或+4
                 else if (room.Game.LastCard.card.CardType == CardType.ActionCard &&
-                         room.Game.LastCard.card.CardNumber == (int)CardAction.DrawTwo &&
-                         (card.CardType == CardType.ActionCard && card.CardNumber == (int)CardAction.DrawTwo ||
-                          card.CardType == CardType.UniversalCard &&
-                          card.CardNumber == (int)CardUniversal.WildDrawFour))
+                         room.Game.LastCard.card.CardNumber == (int)CardAction.DrawTwo)
                 {
-                    canPlay = true;
+                    if (card.CardType == CardType.ActionCard && card.CardNumber == (int)CardAction.DrawTwo ||
+                        card.CardType == CardType.UniversalCard &&
+                        card.CardNumber == (int)CardUniversal.WildDrawFour)
+                        canPlay = true;
                 }
                 //万能牌
                 else if (card.CardType == CardType.UniversalCard)
@@ -371,20 +372,32 @@ namespace UnoGameBackend.Hubs
                 var currentIndex = room.Game.WaitingForPlayIndex;
                 while (interval > 0)
                 {
-                    currentIndex += 1;
-                    if (currentIndex == room.Players.Length)
-                        currentIndex = 0;
+                    if (room.Game.PlayOrder == PlayOrder.Clockwise)
+                    {
+                        currentIndex += 1;
+                        if (currentIndex >= room.Players.Count(p => p != null))
+                            currentIndex = 0;
+                    }
+                    else
+                    {
+                        currentIndex -= 1;
+                        if (currentIndex < 0)
+                            currentIndex = room.Players.Length - 1;
+                    }
+
                     var next = room.Players[currentIndex];
                     if (next == null) continue;
                     interval -= 1;
                     room.Game.WaitingForPlayIndex = Array.IndexOf(room.Players, next);
                 }
+
                 room.Game.PlayOrder = playOrder;
                 room.Game.DrawCardActionCount = drawCardActionCount;
                 await Clients.Group($"game-{room.Id.ToString()}").SendAsync("PlayCardResult", true, "",
                     new { card, index = Array.IndexOf(room.Players, user) });
                 await UpdatePlayerHandCards(user);
                 await UpdateRoomPlayers(room);
+                await UpdateGameState(room);
             }
             catch (Exception e)
             {
@@ -400,30 +413,58 @@ namespace UnoGameBackend.Hubs
         /// <exception cref="Exception"></exception>
         public async Task DrawCard(string username)
         {
-            var user = Player.Players[username.ToLower()];
-            if (user == null)
+            try
             {
-                throw new Exception("数据出错！");
-            }
+                var user = Player.Players[username.ToLower()];
+                if (user == null)
+                {
+                    throw new Exception("数据出错！");
+                }
 
-            var room = Room.Rooms.FirstOrDefault(r => r.Players.Contains(user));
-            if (room == null || room.Game.Status != GameStatus.Playing)
+                var room = Room.Rooms.FirstOrDefault(r => r.Players.Contains(user));
+                if (room == null || room.Game.Status != GameStatus.Playing)
+                {
+                    throw new Exception("数据出错！");
+                }
+
+                if (room.WaitingForPlay != user)
+                {
+                    throw new Exception("未轮到你抽牌");
+                }
+
+                var drawCount = room.Game.DrawCardActionCount;
+                drawCount = drawCount == 0 ? 1 : drawCount;
+
+                //抽卡
+                user.HandCards.AddRange(room.Game.DrawCard(drawCount));
+                room.Game.DrawCardActionCount = 0;
+                //设置下一个抽卡玩家
+                var orderIndex = room.Game.WaitingForPlayIndex;
+                if (room.Game.PlayOrder == PlayOrder.Clockwise)
+                {
+                    orderIndex += 1;
+                    if (orderIndex >= room.Players.Count(p => p != null))
+                        orderIndex = 0;
+                }
+                else
+                {
+                    orderIndex -= 1;
+                    if (orderIndex < 0)
+                        orderIndex = room.Players.Length - 1;
+                }
+
+                room.Game.WaitingForPlayIndex = orderIndex;
+
+                await UpdatePlayerHandCards(user);
+                await UpdateRoomPlayers(room);
+                await UpdateGameState(room);
+                await Clients.Group(username.ToLower()).SendAsync("DrawCardResult", true, "", null);
+            }
+            catch (Exception e)
             {
-                throw new Exception("数据出错！");
+                Console.WriteLine(e);
+                await Clients.Group(username.ToLower()).SendAsync("DrawCardResult", false, e.Message, null);
             }
-
-            if (room.WaitingForPlay != user)
-            {
-                throw new Exception("未轮到你抽牌");
-            }
-
-            var drawCount = room.Game.DrawCardActionCount;
-            drawCount = drawCount == 0 ? 1 : drawCount;
-
-            //抽卡
-            user.HandCards.AddRange(room.Game.DrawCard(drawCount));
-            await UpdatePlayerHandCards(user);
-            await UpdateRoomPlayers(room);
         }
     }
 }
