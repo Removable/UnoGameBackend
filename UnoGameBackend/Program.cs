@@ -86,4 +86,4 @@ app.UseAuthorization();
 
 app.UseEndpoints(endpoints => endpoints.MapHub<UnoHub>("/uno-hub"));
 
-app.Run();
+app.Run("http://*:25501");
