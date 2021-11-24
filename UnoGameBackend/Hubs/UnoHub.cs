@@ -62,7 +62,7 @@ namespace UnoGameBackend.Hubs
                 username = username.Trim();
                 if (!Player.Players.ContainsKey(username.ToLower()))
                     throw new Exception("找不到用户");
-                var user = Player.Players[username];
+                var user = Player.Players[username.ToLower()];
                 user.IsReady = false;
                 await Clients.Group(username.ToLower())
                     .SendAsync("ReadyChanged", true, string.Empty, user.IsReady);
