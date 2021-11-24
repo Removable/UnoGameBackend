@@ -1,7 +1,9 @@
 ﻿using System.Collections.Concurrent;
+using System.Timers;
 using Microsoft.AspNetCore.SignalR;
 using UnoGameBackend.Data;
 using UnoGameBackend.Game;
+using Timer = System.Timers.Timer;
 
 namespace UnoGameBackend.Hubs
 {
@@ -234,7 +236,8 @@ namespace UnoGameBackend.Hubs
         private async Task UpdateGameState(Room room)
         {
             await Clients.Group($"game-{room.Id.ToString()}").SendAsync("UpdateGameState", (int)room.Game.Status,
-                room.Game.DrawCardActionCount, room.Game.LastCard.color ?? CardColor.Undefined);
+                room.Game.DrawCardActionCount, room.Game.LastCard.color ?? CardColor.Undefined,
+                room.Game.WaitingForPlayIndex);
         }
 
         private async Task UpdateAllPlayersHandCards(Room room)
@@ -290,18 +293,14 @@ namespace UnoGameBackend.Hubs
                 //获取上一张牌
                 var canPlay = false;
                 if (room.Game.LastCard.card == null) canPlay = true;
-                //如果上一张牌是+2牌，并且累计抽卡数大于0时，则跟牌必须为+2或+4；若累计抽卡数等于0，则表明已完成抽卡，仅需判断颜色
+                //如果上一张牌是+2牌，并且累计抽卡数大于0时，则跟牌必须为+2或+4；若累计抽卡数等于0，则表明已完成抽卡，继续正常判断
                 else if (room.Game.LastCard.card.CardType == CardType.ActionCard &&
-                         room.Game.LastCard.card.CardNumber == (int)CardAction.DrawTwo)
+                         room.Game.LastCard.card.CardNumber == (int)CardAction.DrawTwo &&
+                         room.Game.DrawCardActionCount > 0)
                 {
-                    if (room.Game.DrawCardActionCount > 0)
-                    {
-                        if (card.CardType == CardType.ActionCard && card.CardNumber == (int)CardAction.DrawTwo ||
-                            card.CardType == CardType.UniversalCard &&
-                            card.CardNumber == (int)CardUniversal.WildDrawFour)
-                            canPlay = true;
-                    }
-                    else if (room.Game.LastCard.color == card.Color)
+                    if (card.CardType == CardType.ActionCard && card.CardNumber == (int)CardAction.DrawTwo ||
+                        card.CardType == CardType.UniversalCard &&
+                        card.CardNumber == (int)CardUniversal.WildDrawFour)
                         canPlay = true;
                 }
                 //万能牌
@@ -380,8 +379,15 @@ namespace UnoGameBackend.Hubs
                 //牌出完，游戏结束
                 if (user.HandCards.Count <= 0)
                 {
+                    await Clients.Group($"game-{room.Id.ToString()}").SendAsync("UpdateGameState",
+                        (int)GameStatus.Finished,
+                        room.Game.DrawCardActionCount, room.Game.LastCard.color ?? CardColor.Undefined);
                     room.GameFinish();
-                    await UpdateGameState(room);
+                    using var timer = new Timer(1000);
+                    timer.Enabled = true;
+                    timer.AutoReset = false;
+                    timer.Elapsed += async delegate { await UpdateGameState(room); };
+                    timer.Start();
                     return;
                 }
 
