@@ -290,13 +290,18 @@ namespace UnoGameBackend.Hubs
                 //获取上一张牌
                 var canPlay = false;
                 if (room.Game.LastCard.card == null) canPlay = true;
-                //如果上一张牌是+2牌，则跟牌必须为+2或+4
+                //如果上一张牌是+2牌，并且累计抽卡数大于0时，则跟牌必须为+2或+4；若累计抽卡数等于0，则表明已完成抽卡，仅需判断颜色
                 else if (room.Game.LastCard.card.CardType == CardType.ActionCard &&
                          room.Game.LastCard.card.CardNumber == (int)CardAction.DrawTwo)
                 {
-                    if (card.CardType == CardType.ActionCard && card.CardNumber == (int)CardAction.DrawTwo ||
-                        card.CardType == CardType.UniversalCard &&
-                        card.CardNumber == (int)CardUniversal.WildDrawFour)
+                    if (room.Game.DrawCardActionCount > 0)
+                    {
+                        if (card.CardType == CardType.ActionCard && card.CardNumber == (int)CardAction.DrawTwo ||
+                            card.CardType == CardType.UniversalCard &&
+                            card.CardNumber == (int)CardUniversal.WildDrawFour)
+                            canPlay = true;
+                    }
+                    else if (room.Game.LastCard.color == card.Color)
                         canPlay = true;
                 }
                 //万能牌
@@ -371,7 +376,7 @@ namespace UnoGameBackend.Hubs
                 {
                     user.HandCards.AddRange(room.Game.DrawCard(1));
                 }
-                
+
                 //牌出完，游戏结束
                 if (user.HandCards.Count <= 0)
                 {
@@ -382,19 +387,16 @@ namespace UnoGameBackend.Hubs
 
                 room.Game.UsedCards.Add(card);
                 room.Game.LastCard = (card, gameColor);
+                room.Game.PlayOrder = playOrder;
                 //找到下一位应该出牌的玩家
                 var currentIndex = room.Game.WaitingForPlayIndex;
                 while (interval > 0)
                 {
                     CalcPlayOrderIndex(room, ref currentIndex);
-
-                    var next = room.Players[currentIndex];
-                    if (next == null) continue;
                     interval -= 1;
-                    room.Game.WaitingForPlayIndex = Array.IndexOf(room.Players, next);
+                    room.Game.WaitingForPlayIndex = currentIndex;
                 }
 
-                room.Game.PlayOrder = playOrder;
                 room.Game.DrawCardActionCount = drawCardActionCount;
                 await Clients.Group($"game-{room.Id.ToString()}").SendAsync("PlayCardResult", true, "",
                     new { card, index = Array.IndexOf(room.Players, user) });
@@ -443,10 +445,8 @@ namespace UnoGameBackend.Hubs
                 room.Game.DrawCardActionCount = 0;
                 //设置下一个抽卡玩家
                 var orderIndex = room.Game.WaitingForPlayIndex;
-                do
-                {
-                    CalcPlayOrderIndex(room, ref orderIndex);
-                } while (room.WaitingForPlay == null);
+                CalcPlayOrderIndex(room, ref orderIndex);
+
                 room.Game.WaitingForPlayIndex = orderIndex;
 
                 await UpdatePlayerHandCards(user);
@@ -468,18 +468,21 @@ namespace UnoGameBackend.Hubs
         /// <param name="orderIndex"></param>
         private void CalcPlayOrderIndex(Room room, ref int orderIndex)
         {
-            if (room.Game.PlayOrder == PlayOrder.Clockwise)
+            do
             {
-                orderIndex += 1;
-                if (orderIndex >= room.Players.Count(p => p != null))
-                    orderIndex = 0;
-            }
-            else
-            {
-                orderIndex -= 1;
-                if (orderIndex < 0)
-                    orderIndex = room.Players.Length - 1;
-            }
+                if (room.Game.PlayOrder == PlayOrder.Clockwise)
+                {
+                    orderIndex += 1;
+                    if (orderIndex >= room.Players.Length)
+                        orderIndex = 0;
+                }
+                else
+                {
+                    orderIndex -= 1;
+                    if (orderIndex < 0)
+                        orderIndex = room.Players.Length - 1;
+                }
+            } while (room.Players[orderIndex] == null);
         }
     }
 }
