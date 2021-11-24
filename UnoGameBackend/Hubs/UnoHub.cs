@@ -79,6 +79,11 @@ namespace UnoGameBackend.Hubs
                         room.GameFinish();
                         await UpdateGameState(room);
                     }
+                    else
+                    {
+                        room.Game.UsedCards.AddRange(user.HandCards);
+                        user.HandCards.Clear();
+                    }
 
                     await UpdateRoomPlayers(room);
                     await Clients.Group(username.ToLower()).SendAsync("LogoutResult", true, string.Empty);
@@ -229,7 +234,7 @@ namespace UnoGameBackend.Hubs
         private async Task UpdateGameState(Room room)
         {
             await Clients.Group($"game-{room.Id.ToString()}").SendAsync("UpdateGameState", (int)room.Game.Status,
-                room.Game.DrawCardActionCount);
+                room.Game.DrawCardActionCount, room.Game.LastCard.color ?? CardColor.Undefined);
         }
 
         private async Task UpdateAllPlayersHandCards(Room room)
@@ -255,7 +260,7 @@ namespace UnoGameBackend.Hubs
         /// <param name="cardId"></param>
         /// <param name="username"></param>
         /// <param name="color"></param>
-        public async Task PlayCard(Guid cardId, string username, CardColor color)
+        public async Task PlayCard(Guid cardId, string username, int color)
         {
             try
             {
@@ -300,7 +305,7 @@ namespace UnoGameBackend.Hubs
                     canPlay = true;
                 }
                 //颜色相同
-                else if (room.Game.LastCard.card.Color == card.Color)
+                else if (room.Game.LastCard.color == card.Color)
                 {
                     canPlay = true;
                 }
@@ -342,7 +347,8 @@ namespace UnoGameBackend.Hubs
 
                         break;
                     case CardType.UniversalCard:
-                        gameColor = color;
+                        if (color < 0) throw new Exception("颜色选择错误！");
+                        gameColor = (CardColor)color;
                         switch (card.CardNumber)
                         {
                             default:
@@ -380,18 +386,7 @@ namespace UnoGameBackend.Hubs
                 var currentIndex = room.Game.WaitingForPlayIndex;
                 while (interval > 0)
                 {
-                    if (room.Game.PlayOrder == PlayOrder.Clockwise)
-                    {
-                        currentIndex += 1;
-                        if (currentIndex >= room.Players.Count(p => p != null))
-                            currentIndex = 0;
-                    }
-                    else
-                    {
-                        currentIndex -= 1;
-                        if (currentIndex < 0)
-                            currentIndex = room.Players.Length - 1;
-                    }
+                    CalcPlayOrderIndex(room, ref currentIndex);
 
                     var next = room.Players[currentIndex];
                     if (next == null) continue;
@@ -448,19 +443,10 @@ namespace UnoGameBackend.Hubs
                 room.Game.DrawCardActionCount = 0;
                 //设置下一个抽卡玩家
                 var orderIndex = room.Game.WaitingForPlayIndex;
-                if (room.Game.PlayOrder == PlayOrder.Clockwise)
+                do
                 {
-                    orderIndex += 1;
-                    if (orderIndex >= room.Players.Count(p => p != null))
-                        orderIndex = 0;
-                }
-                else
-                {
-                    orderIndex -= 1;
-                    if (orderIndex < 0)
-                        orderIndex = room.Players.Length - 1;
-                }
-
+                    CalcPlayOrderIndex(room, ref orderIndex);
+                } while (room.WaitingForPlay == null);
                 room.Game.WaitingForPlayIndex = orderIndex;
 
                 await UpdatePlayerHandCards(user);
@@ -472,6 +458,27 @@ namespace UnoGameBackend.Hubs
             {
                 Console.WriteLine(e);
                 await Clients.Group(username.ToLower()).SendAsync("DrawCardResult", false, e.Message, null);
+            }
+        }
+
+        /// <summary>
+        /// 计算下个出牌玩家的索引
+        /// </summary>
+        /// <param name="room"></param>
+        /// <param name="orderIndex"></param>
+        private void CalcPlayOrderIndex(Room room, ref int orderIndex)
+        {
+            if (room.Game.PlayOrder == PlayOrder.Clockwise)
+            {
+                orderIndex += 1;
+                if (orderIndex >= room.Players.Count(p => p != null))
+                    orderIndex = 0;
+            }
+            else
+            {
+                orderIndex -= 1;
+                if (orderIndex < 0)
+                    orderIndex = room.Players.Length - 1;
             }
         }
     }

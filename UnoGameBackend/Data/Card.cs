@@ -8,7 +8,7 @@ public class Card
     public int CardNumber { get; set; }
 
     public CardColor? Color { get; set; }
-    
+
     public bool Selected { get; set; }
 
     /// <summary>
@@ -39,6 +39,7 @@ public class Card
         //四种颜色
         foreach (int colorValue in Enum.GetValues(typeof(CardColor)))
         {
+            if (colorValue == (int)CardColor.Undefined) continue; //跳过未定义
             //功能牌，每副牌每种2张
 
             for (var i = 0; i < deckNumber * 2; i++)
@@ -94,6 +95,7 @@ public class Card
             {
                 deck.Remove(card);
             }
+
             //放到后面
             foreach (var card in drawFourCards)
             {

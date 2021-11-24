@@ -26,10 +26,11 @@ public enum CardType
 /// </summary>
 public enum CardColor
 {
-    Red,
-    Yellow,
-    Blue,
-    Green,
+    Undefined = -1,
+    Red = 0,
+    Yellow = 1,
+    Blue = 2,
+    Green =3,
 }
 
 /// <summary>
