@@ -1,6 +1,6 @@
 using UnoGameBackend.Hubs;
 
-var origins = new[] { "http://192.168.1.40:3000", "http://localhost:3000", "https://localhost:3000" };
+var origins = new[] { "https://uno.geekgz.cn", "http://localhost:3000", "https://localhost:3000" };
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
