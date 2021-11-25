@@ -278,9 +278,11 @@ namespace UnoGameBackend.Hubs
             var msg = string.Empty;
             var canPlay = false;
             if (room.Game.LastCard.card == null) canPlay = true;
-            //如果上一张牌是+2牌，并且累计抽卡数大于0时，则跟牌必须为+2或+4；若累计抽卡数等于0，则表明已完成抽卡，继续正常判断
-            else if (room.Game.LastCard.card.CardType == CardType.ActionCard &&
-                     room.Game.LastCard.card.CardNumber == (int)CardAction.DrawTwo &&
+            //如果上一张牌是+2或+4牌，并且累计抽卡数大于0时，则跟牌必须为+2或+4；若累计抽卡数等于0，则表明已完成抽卡，继续正常判断
+            else if ((room.Game.LastCard.card.CardType == CardType.ActionCard &&
+                      room.Game.LastCard.card.CardNumber == (int)CardAction.DrawTwo ||
+                      room.Game.LastCard.card.CardType == CardType.UniversalCard &&
+                      room.Game.LastCard.card.CardNumber == (int)CardUniversal.WildDrawFour) &&
                      room.Game.DrawCardActionCount > 0)
             {
                 if (playCard.CardType == CardType.ActionCard && playCard.CardNumber == (int)CardAction.DrawTwo ||
