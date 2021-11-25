@@ -247,6 +247,7 @@ namespace UnoGameBackend.Hubs
         {
             await Clients.Group($"game-{room.Id.ToString()}").SendAsync("UpdateGameState", (int)room.Game.Status,
                 room.Game.DrawCardActionCount, room.Game.LastCard.color ?? CardColor.Undefined,
+                room.Game.LastCard.card ?? new Card { CardId = Guid.Empty },
                 room.Game.WaitingForPlayIndex, room.Game.LastGamePlayAction);
         }
 
