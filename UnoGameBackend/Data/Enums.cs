@@ -66,3 +66,15 @@ public enum PlayOrder
     /// </summary>
     Anticlockwise,
 }
+
+public enum GamePlayAction
+{
+    /// <summary>
+    /// 出牌
+    /// </summary>
+    Play,
+    /// <summary>
+    /// 抽卡
+    /// </summary>
+    Draw,
+}

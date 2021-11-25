@@ -237,7 +237,7 @@ namespace UnoGameBackend.Hubs
         {
             await Clients.Group($"game-{room.Id.ToString()}").SendAsync("UpdateGameState", (int)room.Game.Status,
                 room.Game.DrawCardActionCount, room.Game.LastCard.color ?? CardColor.Undefined,
-                room.Game.WaitingForPlayIndex);
+                room.Game.WaitingForPlayIndex, room.Game.LastGamePlayAction);
         }
 
         private async Task UpdateAllPlayersHandCards(Room room)
@@ -369,6 +369,7 @@ namespace UnoGameBackend.Hubs
                 }
 
                 user.HandCards.Remove(card);
+                room.Game.LastGamePlayAction = GamePlayAction.Play;
 
                 //仅余一张卡，且非数字卡时，需要自动补一张
                 if (user.HandCards.Count == 1 && user.HandCards.FirstOrDefault()!.CardType != CardType.NumberCard)
@@ -383,11 +384,15 @@ namespace UnoGameBackend.Hubs
                         (int)GameStatus.Finished,
                         room.Game.DrawCardActionCount, room.Game.LastCard.color ?? CardColor.Undefined);
                     room.GameFinish();
-                    using var timer = new Timer(1000);
-                    timer.Enabled = true;
-                    timer.AutoReset = false;
-                    timer.Elapsed += async delegate { await UpdateGameState(room); };
-                    timer.Start();
+
+                    async void Action()
+                    {
+                        Thread.Sleep(1000);
+                        await UpdateGameState(room);
+                    }
+
+                    using var task = new Task(Action);
+                    await task;
                     return;
                 }
 
@@ -405,7 +410,7 @@ namespace UnoGameBackend.Hubs
 
                 room.Game.DrawCardActionCount = drawCardActionCount;
                 await Clients.Group($"game-{room.Id.ToString()}").SendAsync("PlayCardResult", true, "",
-                    new { card, index = Array.IndexOf(room.Players, user) });
+                    new { card, index = Array.IndexOf(room.Players, user), lastGameAction = GamePlayAction.Play });
                 await UpdatePlayerHandCards(user);
                 await UpdateRoomPlayers(room);
                 await UpdateGameState(room);
@@ -454,10 +459,17 @@ namespace UnoGameBackend.Hubs
                 CalcPlayOrderIndex(room, ref orderIndex);
 
                 room.Game.WaitingForPlayIndex = orderIndex;
+                room.Game.LastGamePlayAction = GamePlayAction.Draw;
 
                 await UpdatePlayerHandCards(user);
                 await UpdateRoomPlayers(room);
                 await UpdateGameState(room);
+                await Clients.Group($"game-{room.Id.ToString()}").SendAsync("PlayCardResult", true, "",
+                    new
+                    {
+                        card = new Card { CardId = Guid.Empty }, index = Array.IndexOf(room.Players, user),
+                        lastGameAction = GamePlayAction.Draw
+                    });
                 await Clients.Group(username.ToLower()).SendAsync("DrawCardResult", true, "", null);
             }
             catch (Exception e)

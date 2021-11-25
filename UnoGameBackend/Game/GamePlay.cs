@@ -21,6 +21,11 @@ public class GamePlay
     /// 上一张牌
     /// </summary>
     public (Card? card, CardColor? color) LastCard { get; set; }
+    
+    /// <summary>
+    /// 上一个游戏动作（出牌、抽卡）
+    /// </summary>
+    public GamePlayAction LastGamePlayAction { get; set; }
 
     /// <summary>
     /// 当前出牌顺序(默认顺时针)
