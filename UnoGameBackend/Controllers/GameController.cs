@@ -26,4 +26,11 @@ public class GameController : Controller
     {
         return Json(Room.Rooms.FirstOrDefault(r => r.Id == roomId));
     }
+
+    [HttpGet("GetRooms")]
+    public IActionResult GetRooms()
+    {
+        var rooms = new int[] { 1, 2, 3, 4, 5 };
+        return Json(rooms);
+    }
 }
